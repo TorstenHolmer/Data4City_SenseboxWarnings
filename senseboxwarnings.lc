@@ -1,0 +1,626 @@
+
+<html>
+<head>
+<title>Data4City SenseBox-Warn-Index</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta http-equiv="refresh" content="60"/>
+<font face="arial">
+</head>
+<body>
+<a href="https://data4.city">
+<img src="D4C-animated.gif" alt="Data4City" width="68" height="80" border="0">
+</a>
+
+<h1>Data4City SenseBox-Warn-Index</h1>
+
+<script type="text/javascript">
+function startTimer(duration, display) {
+   var timer = duration, minutes, seconds;
+   setInterval(function () {
+   minutes = parseInt(timer / 60, 10);
+   seconds = parseInt(timer % 60, 10);
+   
+   minutes = minutes < 10 ? "0" + minutes : minutes;
+   seconds = seconds < 10 ? "0" + seconds : seconds;
+   
+   display.textContent = seconds;
+   
+   if (--timer < 0) {
+   timer = duration;
+   }
+   }, 1000);
+   }
+   window.onload = function () {
+   var fiveMinutes = 60,
+   display = document.querySelector('#time');
+   startTimer(fiveMinutes, display);
+   }; </script>
+      
+
+   <?lc
+
+   
+   --------------> Start of Program <---------------
+   
+
+-- TODO: Farbcodes für Feinstaub, UV-Index und Heat-Index
+
+--green 2ecc71
+--gelb f1c40f
+--orange f39c12
+--rot e74c3c
+--lila 9b59b6
+--dunkelrot c0392b
+
+
+
+
+-- Die Event-Handler kommen hinter diesem Teil --
+   -------------------------------------------------
+   ---https://data4.city/wp-content/uploads/2018/11/LOGO_Animation_Loop_h80px.gif.pagespeed.ce.tNW-n8o3lv.gif
+  -- include "senseboxlibrary.lc"   
+   global tSenseBoxDataArray
+   
+   -- Unterscheidung Server und Entwicklung
+   
+   if the environment is "server" then
+      include "easyjson.lc"	
+      put $_GET["BoxID"] into tBoxIDs
+   else
+      put field "Parameter" into tBoxIDs
+      set itemdelimiter to "="
+      put item 2 of tBoxIDs into tBoxIDs
+   end if
+
+   put "<html>" & cr & "<head>" & cr & "</head>" & cr & "<body>" after tHTML_Page   
+   put AnalyseSenseboxes(tBoxIDs) & cr & "</body>" & cr & "</html>" after tHTML_Page
+   put tHTML_Page
+   
+
+-----------> End of Program <----------------------------------
+
+
+
+----------------------------------------------------------------------------------------
+function AnalyseSenseboxes tBoxIDs
+   ----------------------------------------------------------------------------------------
+   
+   global tSenseBoxDataArray
+   put empty into tSenseBoxDataArray 
+   
+   put the number of items in tBoxIDs into tNumberOfBoxes	
+   set itemdelimiter to comma
+   repeat for each item i in tBoxIDs
+      add 1 to tIndexCounter
+      CollectSensorArrayData i, tIndexCounter -- i= ID der Box, tIndexCounter = Position in der Liste
+   end repeat
+   
+   put tIndexCounter into tSenseBoxdataArray["Number of Boxes"]
+   set the twelveHourTime to false
+   
+   -- hier die Zeitkorrektur einbauen: zeit > dateItmes > add 2 to item 4 of tDateItems > Put item 4 & ":" & item 5 > Uhrzeit korrigiert
+   
+   put "<h4>Aktuelle Abfrage um" && the internet date & " </h4>" & cr after tHTMLPage
+   
+   put "<div>Update in <span id=" & quote & "time" & quote & ">60</span> Sekunden...</div><br>" & cr after tHTMLPage
+   
+   # Erzeuge den Tableheader
+   put "<TABLE cellSpacing=0  cellPadding=10 border=1>" & cr after tHTMLPage
+   
+   put "<TR>" & \
+         "<TD>" & "SenseBox" & "</TD>" & \
+         "<TD>" & "Beschreibung" & "</TD>" & \
+         "<TD>" & "Temperatur" & "</TD>" & \
+         "<TD>" & "rel. Luftfeuchte" & "</TD>" & \
+         "<TD>" & "Hitze-Index" & "</TD>" & \
+         "<TD>" & "UV-Index" & "</TD>" & \
+         "<TD>" & "PM 2.5" & "</TD>" & \
+         "<TD>" & "PM 10" & "</TD>" & \
+         "</TR>" & cr after tHTMLPage
+   
+   # Erzeuge die Zeilen der Tabelle
+   
+   repeat with i= 1 to tIndexCounter
+      
+      put "<TR>"& cr after tHTMLPage
+      put CreateSenseBoxDataHTMLRow(i)& cr after tHTMLPage
+      put "</TR>" & cr after tHTMLPage	
+      put cr & cr & cr after tHTMLPage
+      
+   end repeat
+   
+   # Schliesse Tabelle ab
+   put "</table>"  & cr after tHTMLPage
+   return tHTMLPage
+end AnalyseSenseboxes
+
+
+
+------------------------------------------------------------------------------------------
+function HeatIndex tTemperature, tHumidity
+   -- Berechnung des Heat Index nach https://de.wikipedia.org/wiki/Hitzeindex
+   ------------------------------------------------------------------------------------------
+   
+   put tTemperature into T
+   put tHumidity into H
+   
+
+   put -8.784695        into c1
+   put 1.61139411       into c2
+   put 2.338549         into c3
+   put -0.14611605      into c4
+   put -1.2308094 / 100 into c5
+   put -1.6424828 / 100 into c6
+   put 2.211732 / 1000  into c7
+   put 7.2546 / 10000   into c8
+   put -3.582 / 1000000 into c9
+   
+   put c1 + (c2 * T) + (c3 * H) + (c4 * T * H) + (c5 * T^2) + (c6 * H^2) + (c7 * T^2 * H) + (c8 * T * H^2) + (c9 * T^2 * H^2) into tHumidex 
+   
+   put round(tHumidex,0) into tHumidex
+
+   if T < 27 or H < 40 then
+    put "0" into tHumidex
+   end if
+   
+   /*
+   (27…32) °C 	Vorsicht – Bei längeren Zeiträumen und körperlicher Aktivität kann es zu Erschöpfungserscheinungen kommen.
+   (32…40) °C 	Erhöhte Vorsicht – Es besteht die Möglichkeit von Hitzeschäden wie Sonnenstich, Hitzekrampf und Hitzekollaps.
+   (40…54) °C 	Gefahr – Sonnenstich, Hitzekrampf und Hitzekollaps sind wahrscheinlich; Hitzschlag ist möglich.
+   über 54 °C 	Erhöhte Gefahr – Hitzschlag und Sonnenstich sind wahrscheinlich.
+   */
+   
+   if tHumidex < 27 then
+      put "Angenehmes Klima" into tWarning
+   else if tHumidex > 26 and tHumidex < 33 then
+      put "Vorsicht - Bei längeren Zeiträumen und körperlicher Aktivität kann es zu Erschöpfungserscheinungen kommen." into tWarning
+   else if tHumidex > 32 and tHumidex < 41 then
+  --    put textdecode("Erhöhte Vorsicht - Es besteht die Möglichkeit von Hitzeschäden wie Sonnenstich, Hitzekrampf und Hitzekollaps.","UTF-8") into tWarning
+      put "Erhöhte Vorsicht - Es besteht die Möglichkeit von Hitzeschäden wie Sonnenstich, Hitzekrampf und Hitzekollaps." into tWarning
+  
+ else if tHumidex > 40 and tHumidex < 55 then
+      put "Gefahr - Sonnenstich, Hitzekrampf und Hitzekollaps sind wahrscheinlich; Hitzschlag ist möglich." into tWarning
+   else if tHumidex > 54 then
+      put "Erhöhte Gefahr - Hitzschlag und Sonnenstich sind wahrscheinlich." into tWarning
+   end if
+   
+   --   put textencode(tWarning, "UTF-8") into tWarning
+   
+   return tHumidex & tab & textdecode(tWarning, "UTF-8")
+--   return tHumidex & tab & tWarning
+ 
+end HeatIndex
+
+
+------------------------------------------------------------------------------------------
+function getUVI tUV
+   --- errechnet den UV-Index aus dem UV-Intensitaetswert
+------------------------------------------------------------------------------------------
+   return round((0.4 * (tUV * 5.625)) / 1000)
+end getUVI
+
+------------------------------------------------------------------------------------------
+function getUVRating tUV
+   -- erstellt das Rating des UV-Wertes aus dem UV-Messwert
+------------------------------------------------------------------------------------------
+   put (0.4 * (tUV * 5.625)) / 1000 into tUVI
+   
+   switch tUVI
+      case tUVI <=2
+         put "gering" into tRating
+         break
+      case tUVI >= 3 and tUVI <= 5
+         put "mittel" into tRating
+         break
+      case tUVI >= 6 and tUVI <=7
+         put "hoch" into tRating
+         break
+      case tUVI >= 8 and tUVI <=10
+         put "sehr hoch" into tRating
+         break
+      case tUVI > 10
+         put "extrem" into tRating
+         break
+   end switch
+   
+   return tRating
+   
+end getUVRating
+
+
+
+
+
+------------------------------------------------------------------------------------------
+on CollectSensorArrayData tSenseBoxID, tIndexCounter
+   --  IN: Id der Sensebox
+   --  IN: IndexCounter wird übergeben, damit die Position in der Tabelle dieselbe wie in der ID-Liste ist 
+   --      beim Array wird sonst die Reihenfolge vermischt
+------------------------------------------------------------------------------------------
+   
+   global tSenseBoxDataArray
+   
+   put "https://api.opensensemap.org/boxes/" & tSenseBoxID into tBoxUrl
+   put url tBoxUrl into tBoxJSON
+   if the environment is "server" then 
+      put arrayFromJSON(tBoxJSON) into tBoxArray
+   else
+      put JSONToArray(tBoxJSON) into tBoxArray
+   end if
+   
+   put tSenseBoxID into tSenseBoxDataArray[tIndexCounter]["_ID"]
+   put tBoxArray["name"] into tSenseBoxDataArray[tIndexCounter]["name"]
+   put tBoxArray["lastMeasurementAt"] into tSenseBoxDataArray[tIndexCounter]["lastMeasurementAt"]
+   
+   put tBoxArray["description"] into tSenseBoxDataArray[tIndexCounter]["description"]
+   replace crlf with space in tSenseBoxDataArray[tIndexCounter]["description"]
+   replace return with space in tSenseBoxDataArray[tIndexCounter]["description"]
+   replace cr with space in tSenseBoxDataArray[tIndexCounter]["description"]
+   put tBoxArray["createdAt"] into tSenseBoxDataArray[tIndexCounter]["createdAt"]
+   
+   repeat for each key i in tBoxArray["sensors"]
+      
+      Put tBoxArray["sensors"][i]["title"] into tSensorTitle      
+      Put tBoxArray["sensors"][i]["lastMeasurement"]["createdAt"] into tSenseBoxDataArray[tIndexCounter][tSensorTitle]["createdAt"]
+      Put tBoxArray["sensors"][i]["lastMeasurement"]["value"] into tSenseBoxDataArray[tIndexCounter][tSensorTitle]["value"]
+      
+   end repeat
+   
+end CollectSensorArrayData
+   
+
+------------------------------------------------------------------------------------------
+function ConvertInternetTimeToSeconds tInternetTime
+------------------------------------------------------------------------------------------
+
+   put item 1 to 6 of replaceText(tInternetTime,"[-T:.]",",") & ",1" into tSeconds
+   convert tSeconds from dateItems to seconds
+   return tSeconds
+
+end ConvertInternetTimeToSeconds
+
+
+------------------------------------------------------------------------------------------
+function CheckSensorDataCorrectness tInternetTime, tValue, tRange 
+   -- IN: Internet-Time, Wert , erlaubter Range des Wertes 
+   -- (sollte es noch genauer sein? grün, gelb, orange, rot?)
+   -- oder ist der Mittelwert = grün, Randbereiche 10% = gelb, und rot = ausserhalb?
+   -- wenn es einseitig ist, dass ist der MIttelwert = eine der Grenzen
+   -- wie ist es mit der Zeit? ab wann outdated? > 1 Stunde
+   -- der letzte Meßwert der Box sollte auch angezeigt werden!
+   -- Aktualität checken: wenn die Differenz über 30 Minuten ist, dann wird der Wert grau unterlegt
+   ------------------------------------------------------------------------------------------
+   
+   -- Alle Zahlen werden auf sind ganze Zahlen gerundet  
+   if tValue is a number then put round(tValue, 0) into tValue
+   
+   -- kein Zeitstempel = kein aussagefähiger Wert (denn vielleicht ist der Messwert veraltet?)
+   
+   if tInternetTime is empty then
+      return "<TD>&nbsp;</TD>"  
+   end if
+   
+   
+   put the seconds into tTimeNow
+   put ConvertInternetTimeToSeconds(tInternetTime) into tEventTime
+   
+   put (tTimeNow - tEventTime) into tDelay
+   
+   -- wenn der Wert veraltet ist (> 30 Minuten), dann wir er grau dargestellt
+   
+   if tDelay > 9000 then 
+      put (tDelay - 7200) div 60 into tDelayMinutes
+      
+      switch
+         case tDelayMinutes > 1440
+            put tDelayMinutes div 1440 into tDelayDays
+            put tDelayMinutes - (tDelayDays * 1440) into tDelayMinutes
+         case tDelayMinutes < 1440
+            put tDelayMinutes div 60 into tDelayHours
+            put tDelayMinutes - (tDelayHours * 60) into tDelayMinutes
+      end switch
+      
+      if tDelayDays is empty then 
+         
+         put empty into tDelayDaysMessage
+         
+      else if tDelayDays = 1 then
+         
+         put tDelayDays && "Tag, " into tDelayDaysMessage
+         
+      else
+         
+         put tDelayDays && "Tagen, " into tDelayDaysMessage
+         
+      end if
+      
+      if tDelayHours is empty then 
+         
+         put empty into tDelayHoursMessage
+         
+      else if tDelayHours = 1 then
+         
+         put tDelayDays && "Stunde und " into tDelayHoursMessage
+         
+      else
+         
+         put tDelayHours && "Stunden und " into tDelayHoursMessage
+         
+      end if
+      
+      if tDelayMinutes is empty then 
+         
+         put empty into tDelayMinutes
+         
+      else if tDelayMinutes = 1 then
+         
+         put tDelayMinutes && "Minute" into tDelayMinutesMessage
+         
+      else
+         
+         put tDelayMinutes && "Minuten" into tDelayMinutesMessage
+         
+      end if
+      
+      put "Letzte Messung vor " & tDelayDaysMessage & tDelayHoursMessage & tDelayMinutesMessage into tDelayMessage
+      return "<TD title=" & quote & tDelayMessage & quote && "bgcolor=" & quote & "lightgrey" & quote & "><center>" & tValue & "</center></TD>" 
+   end if
+   
+   
+   -- Kein Grenzwert, dann einfache Darstellung
+   
+   if tRange is empty then
+      return "<TD><center>" & tValue & "</center></TD>"  
+   end if
+   
+   set itemdelimiter to comma
+   put the number of items in tRange into tNumberOfRanges
+   if tNumberOfRanges = 1 then
+      
+      # Ein Wert = Obergrenze
+      put item 1 of tRange into tUpperBorder
+      
+      if tValue > tRange then
+         put "e74c3c" into tColor
+      else
+         put "2ecc71" into tColor
+	
+      end if
+      
+   else if tNumberOfRanges = 2 then
+      
+      -- zwei Werte = Ober- und Untergrenze
+
+      put item 1 of tRange into tLowerBorder
+      put item 2 of tRange into tUpperBorder
+      
+      if tValue < tLowerBorder then
+         put "2ecc71" into tColor
+      else if tValue >= tLowerBorder and  tValue < tUpperBorder then
+         put "f1c40f" into tColor
+      else
+         put "e74c3c" into tColor
+      end if
+      
+   else if tNumberOfRanges = 4 then
+      -- uv-index
+      -- UV-Index: 3,6,8,11
+      
+      put item 1 of tRange into tRange1
+      put item 2 of tRange into tRange2
+      put item 3 of tRange into tRange3
+      put item 4 of tRange into tRange4
+      
+      switch
+         case tValue < tRange1
+            put "2ecc71" into tColor
+            break
+         case tValue < tRange2
+            put "f1c40f" into tColor
+            break
+         case tValue < tRange3
+            put "f39c12" into tColor
+            break
+         case tValue < tRange4
+            put "e74c3c" into tColor
+            break
+         default
+            put "9b59b6" into tColor
+      end switch
+      
+      
+   else if tNumberOfRanges = 5 then
+      -- heat-index 27,33,41,54 
+      /*
+      0 - 26 2ecc71
+      27-32 f1c40f
+      33-40 f39c12
+      41-54 e74c3c
+      > 54 9b59b6
+      
+      
+      --green 2ecc71
+      --gelb f1c40f
+      --orange f39c12
+      --rot e74c3c
+      --lila 9b59b6
+      --dunkelrot c0392b
+      */
+      
+      -- je Wert eine andere farbe einbauen
+      switch 
+         
+         
+      end switch
+      
+      
+      
+   end if
+   
+   
+   /*
+   if tValue < tLowerBorder then
+      
+      # Wert kleiner als Grenze = orange
+      return "<TD bgcolor=" & quote & "orange" & quote & "><center>" & tValue & "</center></TD>" 
+      
+   else if tValue > tUpperBorder then
+      
+      # Wert größer als Grenze = orange
+      return "<TD bgcolor=" & quote & "orange" & quote & "><center>" & tValue & "</center></TD>" 
+      
+   else
+      # Wert innerhalb der Grenze = grün
+      return "<TD bgcolor=" & quote & "lightgreen" & quote & "><center>" & tValue & "</center></TD>"  
+      
+   end if
+   */
+   
+   
+   return "<TD bgcolor=" & quote & tColor & quote & "><center>" & tValue & "</center></TD>"  
+   
+   
+end CheckSensorDataCorrectness
+   
+   
+   
+------------------------------------------------------------------------------------------
+function CreateSenseBoxDataHTMLRow tIndex
+   --  IN: Index der Box in tSenseBoxdataArray
+   -- OUT: die Daten der Sensorwerte mit Aktualitäts- / Gültigkeitsindikator
+   ------------------------------------------------------------------------------------------
+   
+   /*
+   Aktualität ein ein wichtiger Gesichtspunkt, aber
+   die Bedeutung des Wertes ist wichtiger. Im Grunde können Daten, die veraltet sind, ausgeblendet/in Grau werden
+   Wichtiger ist die Gesundheit des Wertes: Feinstaub, Temperatur, 
+   
+   
+   Der Luftdruck am Boden schwankt bei uns in der Regel zwischen 
+   * 970 hPa bei einem Tiefdruckgebiet und 
+   * 1030 hPa bei einem Hochdruckgebiet. 
+   Dadurch kann der Wert als Indikator für das aktuelle Wetter dienen.
+   
+   1000 = normaler Luftdruck: 1000 hPa = 1 bar
+   
+   --> wo sinkt der Wert unter 1000?
+   
+   Feinstaubgrenzen:  
+   
+   Seit dem 1. Januar 2005 beträgt der einzuhaltende Tagesmittelwert für PM10 in der EU 50 µg/m³ 
+   bei 35 zugelassenen Überschreitungen im Kalenderjahr.
+   >> bei kompletten Daten ist das leicht zu überprüfen :-)
+   >> erster Tag bis letzter Tag des Jahres eines PM10 Sensors
+   
+   */
+   
+   global tSenseBoxDataArray -- Globale Variable, in der alle Daten der SensorBoxen gespeichert sind
+   
+   put tSenseBoxdataArray[tIndex]["_ID"]into tID
+   put tSenseBoxdataArray[tIndex]["name"]into tName
+   put textdecode(tName, "UTF-8") into tName
+   
+   --- Name mit ID als Link zu OpenenseMap ---
+   
+   put "<TD><a href=" & quote & "https://opensensemap.org/explore/" & tID & quote & ">" & tName  & "</TD>" & cr into tHTML_Boxname --tHTMLRow
+   put tSenseBoxdataArray[tIndex]["Description"]  into tDescription
+   
+   --- Beschreibung der Box --- 
+   
+   put textdecode(tDescription, "UTF-8") into tDescription
+   put "<TD>" & tDescription & "</TD>" & cr into tHTML_Description
+   
+   --- Temperatur ---
+   
+   put tSenseBoxdataArray[tIndex]["Temperatur"]["createdAt"] into tCreatedAt
+   if tCreatedAt is empty then 
+      put tSenseBoxdataArray[tIndex]["Temperature"]["createdAt"] into tCreatedAt
+      put tSenseBoxdataArray[tIndex]["Temperature"]["value"] into tTemperatur
+   else
+      put tSenseBoxdataArray[tIndex]["Temperatur"]["value"] into tTemperatur
+   end if
+   
+   put CheckSensorDataCorrectness(tCreatedAt, tTemperatur, "30,35") into tHTML_Temperature
+   
+   --- PM2.5 ---
+   
+   put tSenseBoxdataArray[tIndex]["PM2.5"]["createdAt"] into tCreatedAt
+   put tSenseBoxdataArray[tIndex]["PM2.5"]["value"] into tPM25
+   put CheckSensorDataCorrectness(tCreatedAt, tPM25, "50") into tHTML_PM25
+   
+   --- PM10 ---
+   
+   put tSenseBoxdataArray[tIndex]["PM10"]["createdAt"] into tCreatedAt
+   put tSenseBoxdataArray[tIndex]["PM10"]["value"] into tPM10
+   put CheckSensorDataCorrectness(tCreatedAt, tPM10, "50") into tHTML_PM10
+   
+   --- Luftdruck ---   
+   
+   put tSenseBoxdataArray[tIndex]["Luftdruck"]["createdAt"] into tCreatedAt
+   put tSenseBoxdataArray[tIndex]["Luftdruck"]["value"] into tLuftdruck
+   -- Korrektur bei Pascal vs. HektoPacal-Luftdruck
+   if tLuftdruck > 90000 then put round(tLuftdruck / 100,0) into tLuftdruck
+   
+   -- put CheckSensorDataCorrectness(tCreatedAt, tLuftdruck, "1200") after tHTMLRow
+   
+   --- Relative Luftfeuchtigkeit ---
+   
+   put tSenseBoxdataArray[tIndex]["rel. Luftfeuchte"]["createdAt"] into tCreatedAt
+   if tCreatedAt is empty then 
+      put tSenseBoxdataArray[tIndex]["Humidity"]["createdAt"] into tCreatedAt
+      put tSenseBoxdataArray[tIndex]["Humidity"]["value"]  into tRelLuftfeuchte
+   else 
+      put tSenseBoxdataArray[tIndex]["rel. Luftfeuchte"]["value"]  into tRelLuftfeuchte
+   end if
+   
+   put CheckSensorDataCorrectness(tCreatedAt, tRelLuftfeuchte, "99") into tHTML_Humidity
+   
+   --- Beleuchtungsstärke ---
+   
+   put tSenseBoxdataArray[tIndex]["Beleuchtungsstärke"]["createdAt"] into tCreatedAt
+   put tSenseBoxdataArray[tIndex]["Beleuchtungsstärke"]["value"] into tBeleuchtungsstaerke
+   -- put CheckSensorDataCorrectness(tCreatedAt, tBeleuchtungsstaerke, "100000") into tHTML_Beleuchtungsstaerke
+   
+   --- UV-Intensität ---   
+   
+   put tSenseBoxdataArray[tIndex]["UV-Intensität"]["createdAt"] into tCreatedAt
+   put tSenseBoxdataArray[tIndex]["UV-Intensität"]["value"] into tUVIntensitaet
+   
+   --- UV-Index berechnen ---
+   
+   put getUVI(tUVIntensitaet) into tUVIndex
+   put CheckSensorDataCorrectness(tCreatedAt, tUVIndex, "3,6,8,11") into tHTML_UVIndex
+   
+   -- über 6 ist hoch!
+   --> hier ein anderes Verfahren, da die Indeizes farblich gestaltet werden sollen und 
+   --- das über die CorrectnesFunktion nicht möglich ist
+   
+   --- Heat Index berechnen ---
+   put tSenseBoxdataArray[tIndex]["rel. Luftfeuchte"]["createdAt"] into tCreatedAt
+   put HeatIndex(tTemperatur, tRelLuftfeuchte) into tHeatIndex
+   
+   set itemdelimiter to tab
+   put item 1 of HeatIndex(tTemperatur,tRelLuftfeuchte) into tHeatIndex
+   put item 2 of HeatIndex(tTemperatur,tRelLuftfeuchte) into tHeatIndexWarnung
+   put tHeatIndex & ": " & tHeatIndexWarnung into tHeatIndexWarnung
+   
+   put CheckSensorDataCorrectness(tCreatedAt, tHeatIndexWarnung, "27,33,41,54" ) into tHTML_HeatIndex
+   
+   -- Spaltenanordnung 
+   
+   put tHTML_Boxname & \
+         tHTML_Description & \
+         tHTML_Temperature & \
+         tHTML_Humidity & \
+         tHTML_HeatIndex & \
+         tHTML_UVIndex & \
+         tHTML_PM25 & \
+         tHTML_PM10 \
+         into THTMLRow
+   
+   return tHTMLRow
+   
+end CreateSenseBoxDataHTMLRow
+
+
+?>
