@@ -22,5 +22,5 @@ https://www.crowdlistener.com/data4city/senseboxwarnings.lc?BoxID=5d11e84030bde6
 
 Die Datei ist ein Livecode-Serverscipt, welches auf einem Webserver ausgeführt wird. 
 
-* Der Livecode-Community-Websever kann hier heruntergeladen werden: https://downloads.livecode.com/livecode/
+* Der Livecode-Community-Webserver kann hier heruntergeladen werden: https://downloads.livecode.com/livecode/
 * Die Installation von Server-Scripten wird hier erklärt: http://lessons.livecode.com/m/4070
