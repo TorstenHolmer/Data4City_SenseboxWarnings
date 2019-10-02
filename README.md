@@ -1,6 +1,7 @@
 # Data4City_SenseboxWarnings
 Ein Livecode-Serverscript zur Akquise und Auswertung von Senseboxdaten zur Erstellung von urbanen Warn-Indizes
 
+* Livecode-Scripte haben die Endung .lc
 
 Zeigt die Sensordaten von Senseboxen anhand der übergebenden BodIds an.
 
